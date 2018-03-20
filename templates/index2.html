@@ -1,0 +1,15 @@
+<!--遍历列表和字典-->
+{% for tem in tem_list %}
+{{ tem }}
+{% endfor %}
+<br/>
+{% for tem in tem_dic %}
+{{ tem_dic[tem] }}
+{% endfor %}
+
+<!--if 判断句式-->
+{% if tem_list.__len__() == 5 %}
+<p>正确</p>
+{% else %}
+<p>{{ tem_list.__len__() }}</p>
+{% endif %}
