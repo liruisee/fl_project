@@ -1,18 +1,55 @@
-from flask import Flask, make_response, redirect, abort, render_template
+from flask import Flask, make_response, redirect, abort, render_template, url_for, session, flash
 from flask.ext.script import Manager
 from flask.ext.bootstrap import Bootstrap
+from flask_wtf import FlaskForm
+from wtforms import StringField, SubmitField
+from wtforms.validators import DataRequired
+from flask.ext.sqlalchemy import SQLAlchemy
 
 
 # 初始化app，接收所有客户端的请求
 app = Flask(__name__)
+# 设置跨站请求防护（csrf）
+app.config['SECRET_KEY'] = 'hard to guess string'
 bootstrap = Bootstrap(app)
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///'+os.path.join(basedir,'data.sqlite')
+app.config['SQLALCHEMY_COMMIT_ON_TEARDOWN'] = True
+db = SQLAlchemy(app)
+
 # manager = Manager(app)
 
 
-# 普通的交互设计
+# 定义一个简单的表单
+class NameForm(FlaskForm):
+    name = StringField('What is your name?', validators=[DataRequired()])
+    submit = SubmitField('Submit')
+
+
+# 定义角色表类
+class Role(db.Model):
+    __tablename__ = 'roles'
+    id = db.Column(db.Integer,primary_key=True)
+    name = db.Column(db.String(64),unique=True)
+
+    def __repr__(self):
+        return '<Role %r>' % self.name
+
+
+# 定义用户表类
+class User(db.Model):
+    __teblename__ = 'users'
+    id = db.Column(db.Integer,primary_key=True)
+    username = db.Column(db.String(64),unique=True,index=True)
+
+    def __repr__(self):
+        return '<User %r>' % self.username
+
+
+# 普通的交互设计（url_for打印出当前url的绝对路径和相对路径）
+@app.route('/')
 @app.route('/page1')
 def page1():
-    return '<h1>Hello World!</h1>'
+    return '<h1>Hello World!</h1>' + '————' + url_for('page1', _external=True) + '————' + url_for('page1')
 
 
 # 自己创造response的交互，还可以设置cookie
@@ -41,7 +78,10 @@ def page4():
 # 空模板
 @app.route('/page5')
 def page5():
-    return render_template('index.html')
+    try:
+        return render_template('index.html')
+    except Exception as e:
+        return render_template('500.html')
 
 
 # 模板传入变量
@@ -72,11 +112,55 @@ def page9(name):
     return render_template('bootstrap.html', name=name)
 
 
-# 自定义错误类型
+# 自定义404错误类型（访问一个不存在的页面就会自动跳转到404页面）
 @app.errorhandler(404)
-def page10(name):
-    name = name if name != '' else ''
-    return render_template('bootstrap.html', name=name)
+def page_not_found(e):
+    return render_template('404.html'), 404
+
+
+# 自定义500错误类型
+@app.errorhandler(500)
+def internal_server_error(e):
+    return render_template('500.html'), 500
+
+
+# 跨站请求
+@app.route('/page11', methods=['GET', 'POST'])
+def page11():
+    name = None
+    form = NameForm()
+    if form.validate_on_submit():
+        name = form.name.data
+        form.name.data = ''
+    return render_template('form.html', form=form, name=name)
+
+
+# post-->重定向-->get
+@app.route('/page12', methods=['GET', 'POST'])
+def page12():
+    name = None
+    form = NameForm()
+    if form.validate_on_submit():
+        session['name'] = form.name.data
+        print(form.name.data)
+        return redirect(url_for('page12'))
+    return render_template('form.html', form=form, name=session.get('name'))
+
+
+# 登录失败后的响应
+@app.route('/page13', methods=['GET', 'POST'])
+def page13():
+    form = NameForm()
+    if form.validate_on_submit():
+        old_name = session.get('name')
+        if old_name is not None and old_name != form.name.data:
+            flash('Looks like you have changed your name!')
+        session['name'] = form.name.data
+        return redirect(url_for('page13'))
+    return render_template('form.html', form=form, name=session.get('name'))
+
+
+
 
 # 主函数
 if __name__ == '__main__':
